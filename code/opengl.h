@@ -1,0 +1,1 @@
+static void DrawQuad(float x, float y, float w, float h, v4 Color);
