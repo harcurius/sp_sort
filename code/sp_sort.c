@@ -3,8 +3,8 @@
 enum SortingTypes
 {
     SortType_BubbleSort,
-    SortType_MergeSort,
     SortType_InsertionSort,
+    SortType_MergeSort,
     SortType_RadixSort,
 };
 
@@ -21,6 +21,7 @@ typedef struct sorting_data
     int *Elements;
     int *SortedElements;
     
+	int AllocatedSteps;
     int SortStepCount;
     int CurrentStep;
     sort_step *SortSteps;
@@ -28,6 +29,15 @@ typedef struct sorting_data
 
 static sorting_data *SortingAlgos;
 static int SortingAlgoCount;
+
+static void
+AllocStep(sorting_data *Data){
+    if(Data->SortStepCount >= Data->AllocatedSteps)
+    {
+        Data->AllocatedSteps *= 2;
+        Data->SortSteps= PlatformReallocate(Data->SortSteps, sizeof(sort_step)*Data->AllocatedSteps);
+    }
+}
 
 static void
 FillRandom(sorting_data *Data, u32 Max)
@@ -60,12 +70,8 @@ Swap(int *Elements, int a, int b)
 static void
 BubbleSort(sorting_data *Data)
 {
-    int SortStepAllocCount = 1;
     int n = Data->ElementCount;
-    if(!Data->SortSteps)
-    {
-        Data->SortSteps = PlatformAllocate(sizeof(sort_step) * SortStepAllocCount);
-    }
+	Data->SortSteps = PlatformAllocate(sizeof(sort_step));
     while(n != 0)
     {
         int newn = 0;
@@ -73,11 +79,7 @@ BubbleSort(sorting_data *Data)
         {
             if(Data->SortedElements[i-1] > Data->SortedElements[i])
             {
-                if(Data->SortStepCount > SortStepAllocCount - 1)
-                {
-                    SortStepAllocCount *= 2;
-                    Data->SortSteps= PlatformReallocate(Data->SortSteps, sizeof(sort_step) * SortStepAllocCount);
-                }
+				AllocStep(Data);
                 Data->SortSteps[Data->SortStepCount++] = Swap(Data->SortedElements, i-1, i);
                 newn = i;
             }
@@ -86,6 +88,28 @@ BubbleSort(sorting_data *Data)
     }
     PlatformDeallocate(Data->SortedElements);
 }
+
+static void
+InsertionSort(sorting_data *Data){
+    int n = Data->ElementCount, j, element;
+	Data->SortSteps = PlatformAllocate(sizeof(sort_step));
+	
+    for(int i = 1; i <= n - 1; ++i)
+    {
+		element = Data->SortedElements[i];
+		j = i;
+		while( j > 0 && Data->SortedElements[j-1] > element)
+		{
+			AllocStep(Data);
+			Data->SortSteps[Data->SortStepCount++] = Swap(Data->SortedElements, j-1, j);
+			j--;
+		}
+
+    }
+	PlatformDeallocate(Data->SortedElements);
+}
+
+
 
 static void
 AdvanceStep(sorting_data *Data, int Amount)
@@ -121,31 +145,39 @@ UPDATE_AND_RENDER(UpdateAndRenderFunc)
 {	
     static b32 FastMode = false;
     static b32 Initialized = false;
+	static u32 curr = SortType_BubbleSort;
     if(!Initialized)
     {
-        SortingAlgoCount = 1;
+        SortingAlgoCount = 2;
         SortingAlgos = PlatformAllocate(sizeof(sorting_data) * SortingAlgoCount);
-        MemorySet(&SortingAlgos[0], 0, sizeof(sorting_data));
-        SortingAlgos[0].Type = SortType_BubbleSort;
-        SortingAlgos[0].CurrentStep = -1;
-        SortingAlgos[0].ElementCount = 10;
-        FillRandom(&SortingAlgos[0], SortingAlgos[0].ElementCount);
+		SortingAlgos[0].Type = SortType_BubbleSort;
+		SortingAlgos[1].Type = SortType_InsertionSort;
+		for(u32 i = 0; i<SortingAlgoCount; i++){
+			MemorySet(&SortingAlgos[i], 0, sizeof(sorting_data));
+			SortingAlgos[i].Type = SortType_BubbleSort;
+			SortingAlgos[i].CurrentStep = -1;
+			SortingAlgos[i].AllocatedSteps = 1;
+			SortingAlgos[i].ElementCount = 40;
+			FillRandom(&SortingAlgos[i], SortingAlgos[i].ElementCount);
+		}
+		
         BubbleSort(&SortingAlgos[0]);
+		InsertionSort(&SortingAlgos[1]);
         Initialized = true;
     }
     if(!FastMode)
     {
         if(KeyDown(Input_Left, Input))
         {
-            AdvanceStep(&SortingAlgos[0], -1);
+            AdvanceStep(&SortingAlgos[curr], -1);
         }
         if(KeyDown(Input_Right, Input))
         {
-            AdvanceStep(&SortingAlgos[0], 1);
+            AdvanceStep(&SortingAlgos[curr], 1);
         }
         if(KeyDown('R', Input))
         {
-            AdvanceStep(&SortingAlgos[0], -SortingAlgos[0].CurrentStep);
+            AdvanceStep(&SortingAlgos[curr], -SortingAlgos[curr].CurrentStep);
         }
     }
     
@@ -153,10 +185,18 @@ UPDATE_AND_RENDER(UpdateAndRenderFunc)
     {
         FastMode = !FastMode;
     }
+	if(KeyDown('1', Input))
+    {
+        curr = SortType_BubbleSort;
+    }
+	else if(KeyDown('2', Input))
+    {
+        curr = SortType_InsertionSort;
+    }
     if(FastMode)
     {
-        AdvanceStep(&SortingAlgos[0], 1);
-        if(SortingAlgos[0].CurrentStep >= SortingAlgos[0].SortStepCount)
+        AdvanceStep(&SortingAlgos[curr], 1);
+        if(SortingAlgos[curr].CurrentStep >= SortingAlgos[curr].SortStepCount)
         {
             FastMode = false;
         }
@@ -173,19 +213,19 @@ UPDATE_AND_RENDER(UpdateAndRenderFunc)
         0,0.5f,0.5f,1
     };
     
-    float BarWidth = Width / SortingAlgos[0].ElementCount;
+    float BarWidth = Width / SortingAlgos[curr].ElementCount;
     float BarHeightMultiply = 20;
     
-    for(u32 i = 0; i < SortingAlgos[0].ElementCount; ++i)
+    for(u32 i = 0; i < SortingAlgos[curr].ElementCount; ++i)
     {
         v4 Color = Colors[i%2];
-        DrawQuad(i * BarWidth + 1, 0, BarWidth - 1, SortingAlgos[0].Elements[i] * BarHeightMultiply, Color);
+        DrawQuad(i * BarWidth + 1, 0, BarWidth - 1, SortingAlgos[curr].Elements[i] * BarHeightMultiply, Color);
     }
-    if(SortingAlgos[0].CurrentStep >= 0 && SortingAlgos[0].CurrentStep < SortingAlgos[0].SortStepCount)
+    if(SortingAlgos[curr].CurrentStep >= 0 && SortingAlgos[curr].CurrentStep < SortingAlgos[curr].SortStepCount)
     {
-        int i = SortingAlgos[0].SortSteps[SortingAlgos[0].CurrentStep].From;
-        DrawQuad(i * BarWidth + 1, 0, BarWidth - 1, SortingAlgos[0].Elements[i] * BarHeightMultiply, HighlightColors[0]);
-        i = SortingAlgos[0].SortSteps[SortingAlgos[0].CurrentStep].To;
-        DrawQuad(i * BarWidth + 1, 0, BarWidth - 1, SortingAlgos[0].Elements[i] * BarHeightMultiply, HighlightColors[1]);
+        int i = SortingAlgos[curr].SortSteps[SortingAlgos[curr].CurrentStep].From;
+        DrawQuad(i * BarWidth + 1, 0, BarWidth - 1, SortingAlgos[curr].Elements[i] * BarHeightMultiply, HighlightColors[0]);
+        i = SortingAlgos[curr].SortSteps[SortingAlgos[curr].CurrentStep].To;
+        DrawQuad(i * BarWidth + 1, 0, BarWidth - 1, SortingAlgos[curr].Elements[i] * BarHeightMultiply, HighlightColors[1]);
     }
 }
