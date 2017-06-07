@@ -1,1 +1,0 @@
-start "" "P:\4coder\4ed.exe" code/win32.c

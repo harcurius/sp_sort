@@ -1,0 +1,4 @@
+build/*
+build.bat
+debug.bat
+editor.bat
